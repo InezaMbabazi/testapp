@@ -48,6 +48,7 @@ def fetch_student_name(student_id):
     return response.json()['name'] if response.status_code == 200 else 'Unknown'
 
 # Format the gradebook data
+# Format the gradebook data
 def format_gradebook(course_id):
     gradebook = []
     assignment_groups = fetch_assignment_groups(course_id)
@@ -59,7 +60,7 @@ def format_gradebook(course_id):
         assignments = fetch_assignments(course_id, group['id'])
         for assignment in assignments:
             assignment_name = assignment['name']
-            assignment_max_score = assignment['points_possible']
+            assignment_max_score = assignment.get('points_possible', 0)  # Default to 0 if missing or None
 
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
@@ -83,6 +84,7 @@ def format_gradebook(course_id):
     if not df.empty:
         df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
     return df
+
 
 # Streamlit display function to show courses and their grades
 def display_all_courses_grades():
