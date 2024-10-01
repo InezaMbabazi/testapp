@@ -1,56 +1,69 @@
 import requests
 import pandas as pd
+import streamlit as st
 
-# Set up your Canvas API token and base URL
-API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
+# Replace with your actual Canvas API token
+API_TOKEN = 'your_canvas_api_token'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
+COURSE_URL_TEMPLATE = 'https://kepler.instructure.com/courses/{}'
 
-# Define headers for authorization
+# Set headers for the API request
 headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch all courses using pagination
+# Function to fetch all courses
 def fetch_all_courses():
     url = f'{BASE_URL}/courses'
     params = {
-        'per_page': 100  # Number of courses per page
+        'per_page': 100  # Fetch up to 100 courses per request
     }
     courses = []
     
     while url:
         response = requests.get(url, headers=headers, params=params)
-        
+
         if response.status_code == 200:
-            # Add current page courses to the list
-            courses.extend(response.json())
-            
-            # Check if there's a next page
+            courses_page = response.json()
+            courses.extend(courses_page)
+
+            # Check if there's a 'next' link in the response headers for pagination
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
-                url = None  # Stop if no more pages
+                url = None
         else:
-            print(f"Error fetching courses: {response.status_code}")
+            st.error(f"Error fetching courses: {response.status_code}")
             break
-    
+
     return courses
 
-# Fetch all courses and store them in a DataFrame
-def fetch_courses_to_dataframe():
-    courses = fetch_all_courses()
-    
-    if courses:
-        # Convert the courses list to a pandas DataFrame
-        df = pd.DataFrame(courses)
-        return df
-    else:
-        print("No courses found.")
-        return pd.DataFrame()
+# Streamlit app to display courses
+def display_courses():
+    st.title("Canvas Courses")
 
-# Main execution
+    # Fetch all courses
+    courses = fetch_all_courses()
+
+    if courses:
+        # Create a list of tuples with course ID and name
+        course_list = [(course['id'], course['name']) for course in courses]
+
+        # Create a DataFrame for display
+        df_courses = pd.DataFrame(course_list, columns=['Course ID', 'Course Name'])
+
+        # Add a column with course URLs
+        df_courses['Course URL'] = df_courses['Course ID'].apply(lambda x: COURSE_URL_TEMPLATE.format(x))
+
+        # Display the DataFrame
+        st.dataframe(df_courses)
+
+        # Optionally, display as a list
+        for index, row in df_courses.iterrows():
+            st.write(f"Course Name: {row['Course Name']}, Course URL: {row['Course URL']}")
+    else:
+        st.write("No courses found or access denied.")
+
+# Run the Streamlit app
 if __name__ == "__main__":
-    df_courses = fetch_courses_to_dataframe()
-    
-    # Print the DataFrame or display it using Streamlit or other tools
-    print(df_courses)
+    display_courses()
