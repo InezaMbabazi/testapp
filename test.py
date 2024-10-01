@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
+API_TOKEN = 'your_actual_canvas_api_token'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
@@ -119,17 +119,19 @@ def format_gradebook(course_id):
 # Streamlit display function to show courses and their grades
 def display_all_courses_grades():
     courses = fetch_all_courses()
-    st.title("Course Grades")
+    st.title("Course Grades with Grades")
 
     # Display all courses fetched
     for course in courses:
         course_id = course['id']
         course_name = course['name']
-        st.header(f"Course: {course_name} (ID: {course_id})")
-
+        
         # Fetch and display the gradebook
         df_gradebook = format_gradebook(course_id)
+        
+        # Only display courses that have grades
         if not df_gradebook.empty:
+            st.header(f"Course: {course_name} (ID: {course_id})")
             st.dataframe(df_gradebook)
         else:
             st.write(f"No grades found for {course_name}.")
