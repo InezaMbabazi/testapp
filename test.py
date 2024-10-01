@@ -81,26 +81,20 @@ def format_gradebook(course_id):
                     'Percentage': round(percentage, 2)
                 })
     
+    # Convert gradebook to DataFrame
     df = pd.DataFrame(gradebook)
-    df = df.groupby(['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
+    
+    # Print DataFrame to verify the structure
+    print("Gradebook DataFrame:\n", df.head())  # Print the first few rows of the DataFrame
+    
+    # Check if all expected columns are present
+    print("Columns in DataFrame:", df.columns)
+
+    # Group by student and assignment groups if all columns are present
+    if all(col in df.columns for col in ['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']):
+        df = df.groupby(['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
+    else:
+        print("Missing one or more columns required for grouping.")
     
     return df
 
-# Example usage: Fetch all courses and display their gradebook
-def display_all_courses_grades():
-    courses = fetch_courses(ACCOUNT_ID)
-    
-    if not courses:
-        print("No courses found.")
-        return
-    
-    for course in courses:
-        course_id = course['id']
-        course_name = course['name']
-        
-        print(f"\nCourse ID: {course_id}, Course Name: {course_name}")
-        df_gradebook = format_gradebook(course_id)
-        print(df_gradebook)
-
-# Call the function to display grades for all courses
-display_all_courses_grades()
