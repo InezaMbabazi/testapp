@@ -58,7 +58,7 @@ def fetch_grades(course_id, assignment_id):
 def fetch_student_name(student_id):
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
-    return response.json()['name'] if response.status_code == 200 else 'Unknown'
+    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
 
 # Function to calculate percentage grades and format data
 def format_gradebook(course_id):
@@ -102,7 +102,7 @@ def format_gradebook(course_id):
 
     # Group by student and assignment groups if all columns are present
     if all(col in df.columns for col in ['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']):
-        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
+        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean().reset_index()
     else:
         print("Missing one or more columns required for grouping.")
     
