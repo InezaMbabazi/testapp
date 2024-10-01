@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
+API_TOKEN = 'your_actual_canvas_api_token'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
@@ -82,7 +82,7 @@ def format_gradebook(course_id):
         assignments = fetch_assignments(course_id, group['id'])
         for assignment in assignments:
             assignment_name = assignment['name']
-            assignment_max_score = assignment['points_possible']
+            assignment_max_score = assignment.get('points_possible', 0)  # Default to 0 if not present
 
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
@@ -90,6 +90,11 @@ def format_gradebook(course_id):
                 student_name = fetch_student_name(student_id)  # Fetch student name
                 grade = submission.get('score', 0)  # Handle missing grades
 
+                # Ensure grades are numeric
+                grade = float(grade) if grade is not None else 0
+                assignment_max_score = float(assignment_max_score) if assignment_max_score is not None else 0
+
+                # Calculate percentage
                 percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
 
                 gradebook.append({
