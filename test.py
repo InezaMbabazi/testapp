@@ -5,16 +5,15 @@ import streamlit as st
 # Replace with your Canvas API token
 API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
-ACCOUNT_ID = 1  # Account ID as per the screenshot
 
 # Set headers for authentication
 headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch all courses in the account
+# Function to fetch all courses
 def fetch_all_courses():
-    url = f'{BASE_URL}/accounts/{ACCOUNT_ID}/courses'
+    url = f'{BASE_URL}/courses'
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
