@@ -1,58 +1,59 @@
 import requests
 import pandas as pd
-import streamlit as st
 
-# Replace with your Canvas API token and course ID
+# Replace with your Canvas API token
 API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
-COURSE_ID = 2494
 BASE_URL = 'https://kepler.instructure.com/api/v1'
+ACCOUNT_ID = 1  # Assuming you are fetching courses from account 1
 
 # Set headers for authentication
 headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch course details (including the course name)
-def fetch_course_details(course_id):
-    url = f'{BASE_URL}/courses/{course_id}'
+# Fetch all courses for the account
+def fetch_courses(account_id):
+    url = f'{BASE_URL}/accounts/{account_id}/courses'
     response = requests.get(url, headers=headers)
-    return response.json() if response.status_code == 200 else {}
+    
+    # Check for errors in the API response
+    if response.status_code != 200:
+        print(f"Error fetching courses: {response.status_code}, {response.text}")
+        return []
+    
+    courses = response.json()
+    
+    # Check if any courses were fetched
+    if len(courses) == 0:
+        print("No courses available or token does not have access to any courses.")
+    else:
+        print(f"Fetched {len(courses)} courses.")
+    
+    return courses
 
-# Function to fetch assignment groups
+# Fetch assignment groups for a course
 def fetch_assignment_groups(course_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Function to fetch assignments in each group
+# Fetch assignments in each group
 def fetch_assignments(course_id, group_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Function to fetch student submissions for an assignment
+# Fetch student submissions for an assignment
 def fetch_grades(course_id, assignment_id):
     url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Function to fetch student names
-def fetch_student_name(user_id):
-    url = f'{BASE_URL}/users/{user_id}/profile'
-    response = requests.get(url, headers=headers)
-    return response.json()['name'] if response.status_code == 200 else 'Unknown'
-
-# Function to calculate percentage grades and format data
+# Format the gradebook for a specific course
 def format_gradebook(course_id):
     gradebook = []
-    
-    # Fetch course details
-    course_details = fetch_course_details(course_id)
-    course_name = course_details.get('name', 'Unknown Course')  # Fetch course name
-
     assignment_groups = fetch_assignment_groups(course_id)
     
-    # For each assignment group, fetch assignments and their weights
     for group in assignment_groups:
         group_name = group['name']
         group_weight = group['group_weight']
@@ -62,24 +63,16 @@ def format_gradebook(course_id):
             assignment_name = assignment['name']
             assignment_max_score = assignment['points_possible']
 
-            # Fetch student grades for each assignment
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
                 student_id = submission['user_id']
-                student_name = fetch_student_name(student_id)  # Fetch the student's name
-                grade = submission.get('score', 0)  # Fetch grade; default to 0 if missing or None
-                
-                # Ensure grade is not None and handle missing values
+                grade = submission.get('score', 0)
                 grade = grade if grade is not None else 0
                 
-                # Calculate percentage for this assignment
                 percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
 
-                # Append data for display
                 gradebook.append({
-                    'Course Name': course_name,  # Add the course name here
                     'Student ID': student_id,
-                    'Student Name': student_name,
                     'Assignment Group': group_name,
                     'Group Weight': group_weight,
                     'Assignment Name': assignment_name,
@@ -88,27 +81,26 @@ def format_gradebook(course_id):
                     'Percentage': round(percentage, 2)
                 })
     
-    # Create DataFrame and display the gradebook
     df = pd.DataFrame(gradebook)
+    df = df.groupby(['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
     
     return df
 
-# Example Usage
-df_gradebook = format_gradebook(COURSE_ID)
+# Example usage: Fetch all courses and display their gradebook
+def display_all_courses_grades():
+    courses = fetch_courses(ACCOUNT_ID)
+    
+    if not courses:
+        print("No courses found.")
+        return
+    
+    for course in courses:
+        course_id = course['id']
+        course_name = course['name']
+        
+        print(f"\nCourse ID: {course_id}, Course Name: {course_name}")
+        df_gradebook = format_gradebook(course_id)
+        print(df_gradebook)
 
-# Save the DataFrame to CSV and display in Streamlit
-st.title("Canvas Gradebook")
-
-# Display course name
-course_details = fetch_course_details(COURSE_ID)
-course_name = course_details.get('name', 'Unknown Course')
-st.subheader(f"Course: {course_name}")
-
-# Display the DataFrame
-st.dataframe(df_gradebook)
-
-# Save to CSV
-csv_file_path = 'gradeapi.csv'
-df_gradebook.to_csv(csv_file_path, index=False)
-
-st.write(f"Gradebook saved to: {csv_file_path}")
+# Call the function to display grades for all courses
+display_all_courses_grades()
