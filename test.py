@@ -1,55 +1,47 @@
 import requests
 import pandas as pd
+import streamlit as st
 
-# Replace with your Canvas API token
+# Replace with your Canvas API token and base URL
 API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
-ACCOUNT_ID = 1  # Assuming you are fetching courses from account 1
 
 # Set headers for authentication
 headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Fetch all courses for the account
-def fetch_courses(account_id):
-    url = f'{BASE_URL}/accounts/{account_id}/courses'
+# Function to fetch all courses from the account
+def fetch_all_courses():
+    url = f'{BASE_URL}/accounts/1/courses'
     response = requests.get(url, headers=headers)
-    
-    # Check for errors in the API response
-    if response.status_code != 200:
-        print(f"Error fetching courses: {response.status_code}, {response.text}")
-        return []
-    
-    courses = response.json()
-    
-    # Check if any courses were fetched
-    if len(courses) == 0:
-        print("No courses available or token does not have access to any courses.")
-    else:
-        print(f"Fetched {len(courses)} courses.")
-    
-    return courses
+    return response.json() if response.status_code == 200 else []
 
-# Fetch assignment groups for a course
+# Function to fetch assignment groups for a course
 def fetch_assignment_groups(course_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Fetch assignments in each group
+# Function to fetch assignments in each group
 def fetch_assignments(course_id, group_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Fetch student submissions for an assignment
+# Function to fetch student submissions for an assignment
 def fetch_grades(course_id, assignment_id):
     url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions'
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Format the gradebook for a specific course
+# Function to fetch student names
+def fetch_student_name(student_id):
+    url = f'{BASE_URL}/users/{student_id}/profile'
+    response = requests.get(url, headers=headers)
+    return response.json()['name'] if response.status_code == 200 else 'Unknown'
+
+# Function to calculate percentage grades and format data
 def format_gradebook(course_id):
     gradebook = []
     assignment_groups = fetch_assignment_groups(course_id)
@@ -66,6 +58,7 @@ def format_gradebook(course_id):
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
                 student_id = submission['user_id']
+                student_name = fetch_student_name(student_id)  # Fetch student name
                 grade = submission.get('score', 0)
                 grade = grade if grade is not None else 0
                 
@@ -73,6 +66,7 @@ def format_gradebook(course_id):
 
                 gradebook.append({
                     'Student ID': student_id,
+                    'Student Name': student_name,
                     'Assignment Group': group_name,
                     'Group Weight': group_weight,
                     'Assignment Name': assignment_name,
@@ -81,20 +75,35 @@ def format_gradebook(course_id):
                     'Percentage': round(percentage, 2)
                 })
     
-    # Convert gradebook to DataFrame
     df = pd.DataFrame(gradebook)
-    
-    # Print DataFrame to verify the structure
-    print("Gradebook DataFrame:\n", df.head())  # Print the first few rows of the DataFrame
-    
-    # Check if all expected columns are present
-    print("Columns in DataFrame:", df.columns)
+
+    # Debugging: Print the DataFrame structure and check columns
+    print("Gradebook DataFrame:\n", df.head())  # First few rows for debugging
+    print("Columns in DataFrame:", df.columns)  # Print column names
 
     # Group by student and assignment groups if all columns are present
     if all(col in df.columns for col in ['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']):
-        df = df.groupby(['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
+        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
     else:
         print("Missing one or more columns required for grouping.")
     
     return df
 
+# Streamlit display function to show courses and their grades
+def display_all_courses_grades():
+    courses = fetch_all_courses()
+    st.title("Course Grades")
+
+    # Display all courses fetched
+    for course in courses:
+        course_id = course['id']
+        course_name = course['name']
+        st.header(f"Course: {course_name} (ID: {course_id})")
+
+        # Fetch and display the gradebook
+        df_gradebook = format_gradebook(course_id)
+        st.write(df_gradebook)
+
+# Streamlit app starts here
+if __name__ == "__main__":
+    display_all_courses_grades()
