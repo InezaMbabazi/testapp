@@ -15,6 +15,7 @@ headers = {
 def fetch_courses():
     url = f'{BASE_URL}/courses'
     response = requests.get(url, headers=headers)
+    print(f"Courses API Response: {response.status_code}, {response.text}")  # Print response details
     if response.status_code == 200:
         courses = response.json()
         print(f"Fetched {len(courses)} courses.")
@@ -27,24 +28,28 @@ def fetch_courses():
 def fetch_assignment_groups(course_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
     response = requests.get(url, headers=headers)
+    print(f"Assignment Groups API Response for course {course_id}: {response.status_code}, {response.text}")  # Print response
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch assignments in each group
 def fetch_assignments(course_id, group_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
     response = requests.get(url, headers=headers)
+    print(f"Assignments API Response for group {group_id}: {response.status_code}, {response.text}")  # Print response
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch student submissions for an assignment
 def fetch_grades(course_id, assignment_id):
     url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions'
     response = requests.get(url, headers=headers)
+    print(f"Grades API Response for assignment {assignment_id}: {response.status_code}, {response.text}")  # Print response
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch student names
 def fetch_student_name(user_id):
     url = f'{BASE_URL}/users/{user_id}/profile'
     response = requests.get(url, headers=headers)
+    print(f"Student Name API Response for user {user_id}: {response.status_code}, {response.text}")  # Print response
     return response.json()['name'] if response.status_code == 200 else 'Unknown'
 
 # Function to calculate percentage grades and format data
