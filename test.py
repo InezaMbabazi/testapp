@@ -1,71 +1,95 @@
-import streamlit as st
+import requests
 import pandas as pd
+import streamlit as st
 
-# Sample data for storing users and applications (in a real scenario, this should be a database)
-user_data = pd.DataFrame(columns=["Username", "Password"])
-scholarship_applications = pd.DataFrame(columns=["Username", "Scholarship"])
+# Replace with your Canvas API token and course ID
+API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
+COURSE_ID = 2494
+BASE_URL = 'https://kepler.instructure.com/api/v1'
 
-# Function to check if username already exists
-def check_user_exists(username):
-    return username in user_data["Username"].values
+# Set headers for authentication
+headers = {
+    'Authorization': f'Bearer {API_TOKEN}'
+}
 
-# Function to authenticate user
-def authenticate_user(username, password):
-    if check_user_exists(username):
-        stored_password = user_data[user_data["Username"] == username]["Password"].values[0]
-        return stored_password == password
-    return False
+# Function to fetch assignment groups
+def fetch_assignment_groups(course_id):
+    url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
 
-# Function to apply for scholarship
-def apply_for_scholarship(username):
-    st.write(f"User {username} is applying for a scholarship.")
-    scholarship = st.text_input("Enter scholarship name:")
-    if st.button("Submit application"):
-        if scholarship:
-            new_application = {"Username": username, "Scholarship": scholarship}
-            global scholarship_applications
-            scholarship_applications = pd.concat([scholarship_applications, pd.DataFrame([new_application])], ignore_index=True)
-            st.success("Application submitted successfully!")
-        else:
-            st.error("Please enter a valid scholarship name.")
+# Function to fetch assignments in each group
+def fetch_assignments(course_id, group_id):
+    url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
 
-# Main function
-def main():
-    st.title("Scholarship Application System")
+# Function to fetch student submissions for an assignment
+def fetch_grades(course_id, assignment_id):
+    url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
 
-    # Sidebar for user actions
-    menu = ["Create Account", "Login", "View Applications"]
-    choice = st.sidebar.selectbox("Menu", menu)
+# Function to fetch student names
+def fetch_student_name(user_id):
+    url = f'{BASE_URL}/users/{user_id}/profile'
+    response = requests.get(url, headers=headers)
+    return response.json()['name'] if response.status_code == 200 else 'Unknown'
 
-    if choice == "Create Account":
-        st.subheader("Create a new account")
-        new_username = st.text_input("Enter Username")
-        new_password = st.text_input("Enter Password", type="password")
+# Function to calculate percentage grades and format data
+def format_gradebook(course_id):
+    gradebook = []
+    assignment_groups = fetch_assignment_groups(course_id)
+    
+    # For each assignment group, fetch assignments and their weights
+    for group in assignment_groups:
+        group_name = group['name']
+        group_weight = group['group_weight']
+        
+        assignments = fetch_assignments(course_id, group['id'])
+        for assignment in assignments:
+            assignment_name = assignment['name']
+            assignment_max_score = assignment['points_possible']
 
-        if st.button("Create Account"):
-            if not check_user_exists(new_username):
-                new_row = {"Username": new_username, "Password": new_password}
-                global user_data
-                user_data = pd.concat([user_data, pd.DataFrame([new_row])], ignore_index=True)
-                st.success("Account created successfully!")
-            else:
-                st.error("Username already exists. Please choose a different one.")
+            # Fetch student grades for each assignment
+            grades = fetch_grades(course_id, assignment['id'])
+            for submission in grades:
+                student_id = submission['user_id']
+                student_name = fetch_student_name(student_id)  # Fetch the student's name
+                grade = submission.get('score', 0)  # Fetch grade; default to 0 if missing or None
+                
+                # Ensure grade is not None and handle missing values
+                grade = grade if grade is not None else 0
+                
+                # Calculate percentage for this assignment
+                percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
 
-    elif choice == "Login":
-        st.subheader("Login")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+                # Append data for display
+                gradebook.append({
+                    'Student ID': student_id,
+                    'Student Name': student_name,
+                    'Assignment Group': group_name,
+                    'Group Weight': group_weight,
+                    'Assignment Name': assignment_name,
+                    'Grade': grade,
+                    'Max Score': assignment_max_score,
+                    'Percentage': round(percentage, 2)
+                })
+    
+    # Create DataFrame and display the gradebook
+    df = pd.DataFrame(gradebook)
+    
+    return df
 
-        if st.button("Login"):
-            if authenticate_user(username, password):
-                st.success(f"Welcome {username}!")
-                apply_for_scholarship(username)
-            else:
-                st.error("Invalid username or password.")
+# Example Usage
+df_gradebook = format_gradebook(COURSE_ID)
 
-    elif choice == "View Applications":
-        st.subheader("Scholarship Applications")
-        st.write(scholarship_applications)
+# Save the DataFrame to CSV and display in Streamlit
+st.title("Canvas Gradebook")
+st.dataframe(df_gradebook)
 
-if __name__ == "__main__":
-    main()
+# Save to CSV
+csv_file_path = 'gradeapi.csv'
+df_gradebook.to_csv(csv_file_path, index=False)
+
+st.write(f"Gradebook saved to: {csv_file_path}")
