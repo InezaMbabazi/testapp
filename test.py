@@ -12,6 +12,12 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
+# Function to fetch course details (including the course name)
+def fetch_course_details(course_id):
+    url = f'{BASE_URL}/courses/{course_id}'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else {}
+
 # Function to fetch assignment groups
 def fetch_assignment_groups(course_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
@@ -39,6 +45,11 @@ def fetch_student_name(user_id):
 # Function to calculate percentage grades and format data
 def format_gradebook(course_id):
     gradebook = []
+    
+    # Fetch course details
+    course_details = fetch_course_details(course_id)
+    course_name = course_details.get('name', 'Unknown Course')  # Fetch course name
+
     assignment_groups = fetch_assignment_groups(course_id)
     
     # For each assignment group, fetch assignments and their weights
@@ -66,6 +77,7 @@ def format_gradebook(course_id):
 
                 # Append data for display
                 gradebook.append({
+                    'Course Name': course_name,  # Add the course name here
                     'Student ID': student_id,
                     'Student Name': student_name,
                     'Assignment Group': group_name,
@@ -86,6 +98,13 @@ df_gradebook = format_gradebook(COURSE_ID)
 
 # Save the DataFrame to CSV and display in Streamlit
 st.title("Canvas Gradebook")
+
+# Display course name
+course_details = fetch_course_details(COURSE_ID)
+course_name = course_details.get('name', 'Unknown Course')
+st.subheader(f"Course: {course_name}")
+
+# Display the DataFrame
 st.dataframe(df_gradebook)
 
 # Save to CSV
