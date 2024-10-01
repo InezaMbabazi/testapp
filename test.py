@@ -15,7 +15,13 @@ headers = {
 def fetch_courses():
     url = f'{BASE_URL}/courses'
     response = requests.get(url, headers=headers)
-    return response.json() if response.status_code == 200 else []
+    if response.status_code == 200:
+        courses = response.json()
+        print(f"Fetched {len(courses)} courses.")
+        return courses
+    else:
+        print(f"Failed to fetch courses. Status code: {response.status_code}")
+        return []
 
 # Function to fetch assignment groups for a course
 def fetch_assignment_groups(course_id):
@@ -46,12 +52,20 @@ def format_gradebook():
     gradebook = []
     courses = fetch_courses()  # Fetch all courses for the user
     
+    if len(courses) == 0:
+        print("No courses fetched. Exiting.")
+        return pd.DataFrame()  # Return empty DataFrame if no courses found
+    
     # For each course, fetch the course name and its assignment groups
     for course in courses:
         course_id = course['id']
         course_name = course['name']
+        print(f"Processing course: {course_name} (ID: {course_id})")
         
         assignment_groups = fetch_assignment_groups(course_id)
+        if len(assignment_groups) == 0:
+            print(f"No assignment groups found for course: {course_name}.")
+            continue
         
         # For each assignment group, fetch assignments and their weights
         for group in assignment_groups:
@@ -59,12 +73,20 @@ def format_gradebook():
             group_weight = group['group_weight']
             
             assignments = fetch_assignments(course_id, group['id'])
+            if len(assignments) == 0:
+                print(f"No assignments found in group: {group_name}.")
+                continue
+            
             for assignment in assignments:
                 assignment_name = assignment['name']
                 assignment_max_score = assignment['points_possible']
 
                 # Fetch student grades for each assignment
                 grades = fetch_grades(course_id, assignment['id'])
+                if len(grades) == 0:
+                    print(f"No grades found for assignment: {assignment_name}.")
+                    continue
+                
                 for submission in grades:
                     student_id = submission['user_id']
                     student_name = fetch_student_name(student_id)  # Fetch the student's name
@@ -97,14 +119,16 @@ def format_gradebook():
 # Example Usage
 df_gradebook = format_gradebook()
 
-# Save the DataFrame to CSV and display in Streamlit
-st.title("Canvas Gradebook")
+# Check if any data was fetched
+if df_gradebook.empty:
+    print("No gradebook data available.")
+else:
+    # Display the DataFrame in Streamlit
+    st.title("Canvas Gradebook")
+    st.dataframe(df_gradebook)
 
-# Display the DataFrame
-st.dataframe(df_gradebook)
+    # Save to CSV
+    csv_file_path = 'gradeapi.csv'
+    df_gradebook.to_csv(csv_file_path, index=False)
 
-# Save to CSV
-csv_file_path = 'gradeapi.csv'
-df_gradebook.to_csv(csv_file_path, index=False)
-
-st.write(f"Gradebook saved to: {csv_file_path}")
+    st.write(f"Gradebook saved to: {csv_file_path}")
