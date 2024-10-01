@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
+API_TOKEN = 'your_actual_canvas_api_token'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
@@ -11,10 +11,16 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch all courses
-def fetch_all_courses():
+# Function to fetch all terms
+def fetch_all_terms():
+    url = f'{BASE_URL}/terms'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
+
+# Function to fetch courses for a specific term
+def fetch_courses_by_term(term_id):
     courses = []
-    url = f'{BASE_URL}/accounts/1/courses?per_page=100'
+    url = f'{BASE_URL}/terms/{term_id}/courses?per_page=100'
     
     while url:
         response = requests.get(url, headers=headers)
@@ -116,28 +122,36 @@ def format_gradebook(course_id):
     
     return df
 
-# Streamlit display function to show courses and their grades
-def display_all_courses_grades():
-    courses = fetch_all_courses()
-    st.title("Course Grades with Grades")
+# Streamlit display function to show courses and their grades for a selected term
+def display_courses_grades_for_term():
+    terms = fetch_all_terms()
+    term_options = {term['name']: term['id'] for term in terms}
+    
+    # Add a dropdown for selecting a term
+    selected_term = st.selectbox("Select a Term", list(term_options.keys()))
 
-    # Display all courses fetched
-    for course in courses:
-        course_id = course['id']
-        course_name = course['name']
-        course_code = course.get('course_code', 'N/A')  # Fetch course code
+    if selected_term:
+        term_id = term_options[selected_term]
+        courses = fetch_courses_by_term(term_id)
+        st.title(f"Course Grades for Term: {selected_term}")
 
-        # Fetch and display the gradebook
-        df_gradebook = format_gradebook(course_id)
-        
-        # Only display courses that have grades
-        if not df_gradebook.empty:
-            st.header(f"Course: {course_name} (ID: {course_id})")
-            st.write(f"**Course Code:** {course_code}")  # Display course code
-            st.dataframe(df_gradebook)
-        else:
-            st.write(f"No grades found for {course_name}.")
+        # Display all courses fetched
+        for course in courses:
+            course_id = course['id']
+            course_name = course['name']
+            course_code = course.get('course_code', 'N/A')  # Fetch course code
+
+            # Fetch and display the gradebook
+            df_gradebook = format_gradebook(course_id)
+            
+            # Only display courses that have grades
+            if not df_gradebook.empty:
+                st.header(f"Course: {course_name} (ID: {course_id})")
+                st.write(f"**Course Code:** {course_code}")  # Display course code
+                st.dataframe(df_gradebook)
+            else:
+                st.write(f"No grades found for {course_name}.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
-    display_all_courses_grades()
+    display_courses_grades_for_term()
