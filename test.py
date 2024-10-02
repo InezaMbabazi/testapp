@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = 'your_actual_canvas_api_token'
+API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
