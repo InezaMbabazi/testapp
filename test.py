@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 
 # Replace with your Canvas API token and base URL
 API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
@@ -120,23 +121,29 @@ def format_gradebook(course_id):
 def display_all_courses_grades():
     courses = fetch_all_courses()
     st.title("Course Grades with Grades")
+    
+    # Define the cutoff date for filtering courses
+    cutoff_date = datetime.strptime("2024-05-01", "%Y-%m-%d")
 
-    # Display all courses fetched
+    # Filter and display courses with a start date after the cutoff date
     for course in courses:
-        course_id = course['id']
-        course_name = course['name']
-        course_code = course.get('course_code', 'N/A')  # Fetch course code
-
-        # Fetch and display the gradebook
-        df_gradebook = format_gradebook(course_id)
+        course_start_date = datetime.strptime(course['start_at'], "%Y-%m-%dT%H:%M:%SZ")
         
-        # Only display courses that have grades
-        if not df_gradebook.empty:
-            st.header(f"Course: {course_name} (ID: {course_id})")
-            st.write(f"**Course Code:** {course_code}")  # Display course code
-            st.dataframe(df_gradebook)
-        else:
-            st.write(f"No grades found for {course_name}.")
+        if course_start_date > cutoff_date:  # Only show courses that start after May 1, 2024
+            course_id = course['id']
+            course_name = course['name']
+            course_code = course.get('course_code', 'N/A')  # Fetch course code
+
+            # Fetch and display the gradebook
+            df_gradebook = format_gradebook(course_id)
+            
+            # Only display courses that have grades
+            if not df_gradebook.empty:
+                st.header(f"Course: {course_name} (ID: {course_id})")
+                st.write(f"**Course Code:** {course_code}")  # Display course code
+                st.dataframe(df_gradebook)
+            else:
+                st.write(f"No grades found for {course_name}.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
