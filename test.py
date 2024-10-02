@@ -1,15 +1,20 @@
-import requests 
+import requests
 import pandas as pd
 import streamlit as st
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
+API_TOKEN = 'YOUR_API_TOKEN'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
 headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
+
+# Cache to store student names to reduce API calls
+student_name_cache = {}
 
 # Function to fetch all courses
 def fetch_all_courses():
@@ -21,7 +26,6 @@ def fetch_all_courses():
         if response.status_code == 200:
             courses_page = response.json()
             courses.extend(courses_page)
-            # Handle pagination if next page exists
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
@@ -53,7 +57,6 @@ def fetch_grades(course_id, assignment_id):
         if response.status_code == 200:
             grades_page = response.json()
             grades.extend(grades_page)
-            # Handle pagination
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
@@ -64,11 +67,20 @@ def fetch_grades(course_id, assignment_id):
 
     return grades
 
-# Function to fetch student names
+# Function to fetch student names (with caching)
 def fetch_student_name(student_id):
+    if student_id in student_name_cache:
+        return student_name_cache[student_id]
+    
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
-    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
+    
+    if response.status_code == 200:
+        name = response.json().get('name', 'Unknown')
+        student_name_cache[student_id] = name
+        return name
+    else:
+        return 'Unknown'
 
 # Function to calculate percentage grades and format data
 def format_gradebook(course_id):
@@ -87,7 +99,7 @@ def format_gradebook(course_id):
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
                 student_id = submission['user_id']
-                student_name = fetch_student_name(student_id)  # Fetch student name
+                student_name = fetch_student_name(student_id)  # Fetch student name with caching
                 grade = submission.get('score', 0)  # Handle missing grades
 
                 # Ensure grades are numeric
@@ -119,21 +131,27 @@ def format_gradebook(course_id):
 # Function to filter courses based on the number of students
 def filter_courses_by_student_count(courses):
     valid_courses = []
-    
-    for course in courses:
-        course_id = course['id']
-        course_name = course['name']
 
-        # Fetch the gradebook for the course
-        df_gradebook = format_gradebook(course_id)
+    # Using ThreadPoolExecutor to speed up fetching data for multiple courses
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_course = {executor.submit(format_gradebook, course['id']): course for course in courses}
 
-        if not df_gradebook.empty:
-            # Count unique students in the gradebook
-            student_count = df_gradebook['Student ID'].nunique()
-            
-            # Only keep courses with more than 2 students
-            if student_count > 2:
-                valid_courses.append(course)
+        for future in future_to_course:
+            course = future_to_course[future]
+            course_id = course['id']
+            course_name = course['name']
+
+            try:
+                df_gradebook = future.result()  # Get gradebook for the course
+                if not df_gradebook.empty:
+                    # Count unique students in the gradebook
+                    student_count = df_gradebook['Student ID'].nunique()
+
+                    # Only keep courses with more than 2 students
+                    if student_count > 2:
+                        valid_courses.append(course)
+            except Exception as e:
+                st.error(f"Error processing course {course_name}: {e}")
 
     return valid_courses
 
