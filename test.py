@@ -15,24 +15,28 @@ headers = {
 def fetch_all_courses():
     url = f'{BASE_URL}/accounts/1/courses'
     response = requests.get(url, headers=headers)
+    st.write(f"Fetching all courses: {response.status_code}")
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch assignment groups for a course
 def fetch_assignment_groups(course_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
     response = requests.get(url, headers=headers)
+    st.write(f"Fetching assignment groups for course {course_id}: {response.status_code}")
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch assignments in each group
 def fetch_assignments(course_id, group_id):
     url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
     response = requests.get(url, headers=headers)
+    st.write(f"Fetching assignments for group {group_id} in course {course_id}: {response.status_code}")
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch student submissions for an assignment
 def fetch_grades(course_id, assignment_id):
     url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions'
     response = requests.get(url, headers=headers)
+    st.write(f"Fetching grades for assignment {assignment_id} in course {course_id}: {response.status_code}")
     return response.json() if response.status_code == 200 else []
 
 # Function to fetch student info based on their name
@@ -40,8 +44,11 @@ def fetch_students_by_name(name):
     url = f'{BASE_URL}/accounts/1/users'
     params = {'search_term': name}
     response = requests.get(url, headers=headers, params=params)
+    st.write(f"Searching for student with name '{name}': {response.status_code}")
     if response.status_code == 200:
+        st.write(f"Response: {response.json()}")  # Print out the response for debugging
         return response.json()
+    st.error(f"Failed to fetch students for name '{name}'. Status code: {response.status_code}")
     return []
 
 # Function to fetch student names
@@ -101,17 +108,13 @@ def format_gradebook(course_id, student_name):
                     })
     
     df = pd.DataFrame(gradebook)
-
-    # Debugging: Print the DataFrame structure and check columns
-    print("Gradebook DataFrame:\n", df.head())  # First few rows for debugging
-    print("Columns in DataFrame:", df.columns)  # Print column names
-
-    # Group by student and assignment groups if all columns are present
-    if all(col in df.columns for col in ['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']):
-        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
-    else:
-        print("Missing one or more columns required for grouping.")
     
+    if df.empty:
+        st.write(f"No grades found for student {student_name}")
+    else:
+        st.write("Gradebook Data:")
+        st.write(df)
+
     return df
 
 # Streamlit display function to show courses and their grades based on student name
