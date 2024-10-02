@@ -64,7 +64,7 @@ def fetch_grades(course_id, assignment_id):
 
     return grades
 
-# Function to fetch student names
+# Function to fetch student names (optimized by fetching once at the start if needed)
 def fetch_student_name(student_id):
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
