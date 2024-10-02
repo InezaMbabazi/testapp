@@ -137,4 +137,8 @@ def display_course_grades():
         st.header(f"Course: {selected_course_name} (ID: {selected_course_id})")
         st.dataframe(df_gradebook)
     else:
-        st.write(f"No grades found for {
+        st.write(f"No grades found for {selected_course_name}.")
+
+# Streamlit app starts here
+if __name__ == "__main__":
+    display_course_grades()
