@@ -35,16 +35,14 @@ def fetch_grades(course_id, assignment_id):
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
-# Function to fetch student info (including ID) based on their email
-def fetch_student_by_email(email):
+# Function to fetch student info based on their name
+def fetch_students_by_name(name):
     url = f'{BASE_URL}/accounts/1/users'
-    params = {'search_term': email}
+    params = {'search_term': name}
     response = requests.get(url, headers=headers, params=params)
     if response.status_code == 200:
-        users = response.json()
-        if users:
-            return users[0]  # Assuming the first user is the correct one
-    return None
+        return response.json()
+    return []
 
 # Function to fetch student names
 def fetch_student_name(student_id):
@@ -52,18 +50,26 @@ def fetch_student_name(student_id):
     response = requests.get(url, headers=headers)
     return response.json()['name'] if response.status_code == 200 else 'Unknown'
 
-# Function to calculate percentage grades and format data, filtered by student email
-def format_gradebook(course_id, student_email):
+# Function to calculate percentage grades and format data, filtered by student name
+def format_gradebook(course_id, student_name):
     gradebook = []
     
-    # Fetch student based on email
-    student = fetch_student_by_email(student_email)
+    # Fetch student based on name
+    students = fetch_students_by_name(student_name)
     
-    if not student:
-        st.error(f"No student found with email {student_email}")
+    if not students:
+        st.error(f"No students found with name {student_name}")
         return pd.DataFrame()  # Return empty DataFrame
-
-    student_id = student['id']
+    
+    # If multiple students match the name, allow the user to select
+    if len(students) > 1:
+        student_options = {f"{student['name']} (ID: {student['id']})": student['id'] for student in students}
+        selected_student = st.selectbox("Select a student:", list(student_options.keys()))
+        student_id = student_options[selected_student]
+    else:
+        student = students[0]
+        student_id = student['id']
+    
     assignment_groups = fetch_assignment_groups(course_id)
     
     for group in assignment_groups:
@@ -108,13 +114,13 @@ def format_gradebook(course_id, student_email):
     
     return df
 
-# Streamlit display function to show courses and their grades based on student email
+# Streamlit display function to show courses and their grades based on student name
 def display_all_courses_grades():
-    student_email = st.text_input("Enter student email:")
+    student_name = st.text_input("Enter student name:")
     
-    if student_email:
+    if student_name:
         courses = fetch_all_courses()
-        st.title("Course Grades by Student Email")
+        st.title("Course Grades by Student Name")
 
         # Display all courses fetched
         for course in courses:
@@ -122,8 +128,8 @@ def display_all_courses_grades():
             course_name = course['name']
             st.header(f"Course: {course_name} (ID: {course_id})")
 
-            # Fetch and display the gradebook filtered by student email
-            df_gradebook = format_gradebook(course_id, student_email)
+            # Fetch and display the gradebook filtered by student name
+            df_gradebook = format_gradebook(course_id, student_name)
             st.write(df_gradebook)
 
 # Streamlit app starts here
