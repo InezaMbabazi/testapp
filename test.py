@@ -1,9 +1,9 @@
-import requests
+import requests 
 import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
+API_TOKEN = '1941~YfMDLMGz2ZRWRvcWZBG8k7yctAXvfxnGMwCrF3cVJGBzhVKDCvUWDhPeVeDXnaMz'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
@@ -11,30 +11,11 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch all terms from the account
-def fetch_all_terms():
-    url = f'{BASE_URL}/accounts/1/terms'
-    response = requests.get(url, headers=headers)
-    
-    # Check if the response is successful
-    if response.status_code == 200:
-        terms = response.json().get('enrollment_terms', [])
-        return terms if terms else []
-    else:
-        st.error(f"Error fetching terms: {response.status_code} - {response.text}")
-        return []
-
-# Function to fetch all courses for a specific term
-def fetch_all_courses(term_id=None):
+# Function to fetch all courses from the account
+def fetch_all_courses():
     url = f'{BASE_URL}/accounts/1/courses'
-    params = {'enrollment_term_id': term_id} if term_id else {}
-    response = requests.get(url, headers=headers, params=params)
-    
-    if response.status_code == 200:
-        return response.json() if response.json() else []
-    else:
-        st.error(f"Error fetching courses: {response.status_code} - {response.text}")
-        return []
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
 
 # Function to fetch assignment groups for a course
 def fetch_assignment_groups(course_id):
@@ -54,15 +35,35 @@ def fetch_grades(course_id, assignment_id):
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else []
 
+# Function to fetch student info (including ID) based on their email
+def fetch_student_by_email(email):
+    url = f'{BASE_URL}/accounts/1/users'
+    params = {'search_term': email}
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        users = response.json()
+        if users:
+            return users[0]  # Assuming the first user is the correct one
+    return None
+
 # Function to fetch student names
 def fetch_student_name(student_id):
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
-    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
+    return response.json()['name'] if response.status_code == 200 else 'Unknown'
 
-# Function to calculate percentage grades and format data
-def format_gradebook(course_id):
+# Function to calculate percentage grades and format data, filtered by student email
+def format_gradebook(course_id, student_email):
     gradebook = []
+    
+    # Fetch student based on email
+    student = fetch_student_by_email(student_email)
+    
+    if not student:
+        st.error(f"No student found with email {student_email}")
+        return pd.DataFrame()  # Return empty DataFrame
+
+    student_id = student['id']
     assignment_groups = fetch_assignment_groups(course_id)
     
     for group in assignment_groups:
@@ -76,23 +77,22 @@ def format_gradebook(course_id):
 
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
-                student_id = submission['user_id']
-                student_name = fetch_student_name(student_id)  # Fetch student name
-                grade = submission.get('score', 0)
-                grade = grade if grade is not None else 0
-                
-                percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
+                # Only process if the submission belongs to the selected student
+                if submission['user_id'] == student_id:
+                    grade = submission.get('score', 0)
+                    grade = grade if grade is not None else 0
+                    percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
 
-                gradebook.append({
-                    'Student ID': student_id,
-                    'Student Name': student_name,
-                    'Assignment Group': group_name,
-                    'Group Weight': group_weight,
-                    'Assignment Name': assignment_name,
-                    'Grade': grade,
-                    'Max Score': assignment_max_score,
-                    'Percentage': round(percentage, 2)
-                })
+                    gradebook.append({
+                        'Student ID': student_id,
+                        'Student Name': student['name'],
+                        'Assignment Group': group_name,
+                        'Group Weight': group_weight,
+                        'Assignment Name': assignment_name,
+                        'Grade': grade,
+                        'Max Score': assignment_max_score,
+                        'Percentage': round(percentage, 2)
+                    })
     
     df = pd.DataFrame(gradebook)
 
@@ -102,42 +102,29 @@ def format_gradebook(course_id):
 
     # Group by student and assignment groups if all columns are present
     if all(col in df.columns for col in ['Student ID', 'Assignment Group', 'Assignment Name', 'Group Weight']):
-        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean().reset_index()
+        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean()
     else:
         print("Missing one or more columns required for grouping.")
     
     return df
 
-# Streamlit display function to show terms, courses, and their grades
+# Streamlit display function to show courses and their grades based on student email
 def display_all_courses_grades():
-    # Fetch all terms
-    terms = fetch_all_terms()
+    student_email = st.text_input("Enter student email:")
     
-    if terms:
-        # Extract term names and IDs
-        term_options = {term['name']: term['id'] for term in terms}
-        
-        # Allow user to select a term
-        selected_term_name = st.selectbox('Select a Term', list(term_options.keys()))
-        selected_term_id = term_options[selected_term_name]
-        
-        # Fetch and display courses for the selected term
-        st.title(f"Course Grades for Term: {selected_term_name}")
-        courses = fetch_all_courses(selected_term_id)
-        
-        if courses:
-            for course in courses:
-                course_id = course['id']
-                course_name = course['name']
-                st.header(f"Course: {course_name} (ID: {course_id})")
-                
-                # Fetch and display the gradebook
-                df_gradebook = format_gradebook(course_id)
-                st.write(df_gradebook)
-        else:
-            st.warning("No courses found for this term.")
-    else:
-        st.error("No terms found or access denied.")
+    if student_email:
+        courses = fetch_all_courses()
+        st.title("Course Grades by Student Email")
+
+        # Display all courses fetched
+        for course in courses:
+            course_id = course['id']
+            course_name = course['name']
+            st.header(f"Course: {course_name} (ID: {course_id})")
+
+            # Fetch and display the gradebook filtered by student email
+            df_gradebook = format_gradebook(course_id, student_email)
+            st.write(df_gradebook)
 
 # Streamlit app starts here
 if __name__ == "__main__":
