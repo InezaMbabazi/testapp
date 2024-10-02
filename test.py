@@ -139,15 +139,37 @@ def format_gradebook(course_id):
 # Streamlit display function to show courses and their grades
 def display_courses_grades_by_subaccount():
     subaccounts = fetch_all_subaccounts()
+
+    # Ensure subaccounts are not empty
+    if not subaccounts:
+        st.error("No subaccounts found.")
+        return
+    
     st.title("Course Grades by Subaccount")
     
     # Display subaccounts for selection
     subaccount_options = {subaccount['name']: subaccount['id'] for subaccount in subaccounts}
+    
+    # Handle empty subaccount options
+    if not subaccount_options:
+        st.error("No subaccount options available.")
+        return
+
     selected_subaccount_name = st.selectbox("Select Subaccount", list(subaccount_options.keys()))
+    
+    # Ensure the selected subaccount name is valid
+    if selected_subaccount_name not in subaccount_options:
+        st.error("Invalid subaccount selected.")
+        return
+
     selected_subaccount_id = subaccount_options[selected_subaccount_name]
 
     # Fetch and display courses for the selected subaccount
     courses = fetch_courses_by_subaccount(selected_subaccount_id)
+    
+    if not courses:
+        st.error(f"No courses found for subaccount: {selected_subaccount_name}")
+        return
     
     # Display all courses fetched
     for course in courses:
