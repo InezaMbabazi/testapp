@@ -1,9 +1,9 @@
-import requests 
+import requests
 import pandas as pd
 import streamlit as st
 
 # Replace with your Canvas API token and base URL
-API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
+API_TOKEN = 'your_actual_canvas_api_token'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
 # Set headers for authentication
@@ -11,77 +11,133 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch root accounts
-def fetch_root_accounts():
-    url = f'{BASE_URL}/accounts'
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Error fetching root accounts: {response.status_code}")
-        return []
-
-# Function to fetch all subaccounts
-def fetch_all_subaccounts(root_account_id):
-    subaccounts = []
-    url = f'{BASE_URL}/accounts/{root_account_id}/subaccounts?per_page=100'
+# Function to fetch all courses
+def fetch_all_courses():
+    courses = []
+    url = f'{BASE_URL}/accounts/1/courses?per_page=100'
     
     while url:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            subaccounts_page = response.json()
-            subaccounts.extend(subaccounts_page)
+            courses_page = response.json()
+            courses.extend(courses_page)
             # Handle pagination if next page exists
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
                 url = None
         else:
-            st.error(f"Error fetching subaccounts: {response.status_code}")
+            st.error(f"Error fetching courses: {response.status_code}")
             break
-    return subaccounts
+    return courses
+
+# Function to fetch assignment groups for a course
+def fetch_assignment_groups(course_id):
+    url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
+
+# Function to fetch assignments in each group
+def fetch_assignments(course_id, group_id):
+    url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
+    response = requests.get(url, headers=headers)
+    return response.json() if response.status_code == 200 else []
+
+# Function to fetch student submissions for an assignment
+def fetch_grades(course_id, assignment_id):
+    grades = []
+    url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions?per_page=100'
+
+    while url:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            grades_page = response.json()
+            grades.extend(grades_page)
+            # Handle pagination
+            if 'next' in response.links:
+                url = response.links['next']['url']
+            else:
+                url = None
+        else:
+            st.error(f"Error fetching grades: {response.status_code}")
+            break
+
+    return grades
+
+# Function to fetch student names
+def fetch_student_name(student_id):
+    url = f'{BASE_URL}/users/{student_id}/profile'
+    response = requests.get(url, headers=headers)
+    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
+
+# Function to calculate percentage grades and format data
+def format_gradebook(course_id):
+    gradebook = []
+    assignment_groups = fetch_assignment_groups(course_id)
+    
+    for group in assignment_groups:
+        group_name = group['name']
+        group_weight = group.get('group_weight', 0)  # Handle missing group weight
+
+        assignments = fetch_assignments(course_id, group['id'])
+        for assignment in assignments:
+            assignment_name = assignment['name']
+            assignment_max_score = assignment.get('points_possible', 0)  # Default to 0 if not present
+
+            grades = fetch_grades(course_id, assignment['id'])
+            for submission in grades:
+                student_id = submission['user_id']
+                student_name = fetch_student_name(student_id)  # Fetch student name
+                grade = submission.get('score', 0)  # Handle missing grades
+
+                # Ensure grades are numeric
+                grade = float(grade) if grade is not None else 0
+                assignment_max_score = float(assignment_max_score) if assignment_max_score is not None else 0
+
+                # Calculate percentage
+                percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
+
+                gradebook.append({
+                    'Student ID': student_id,
+                    'Student Name': student_name,
+                    'Assignment Group': group_name,
+                    'Group Weight': group_weight,
+                    'Assignment Name': assignment_name,
+                    'Grade': grade,
+                    'Max Score': assignment_max_score,
+                    'Percentage': round(percentage, 2)
+                })
+    
+    df = pd.DataFrame(gradebook)
+
+    if not df.empty:
+        # Group by student and assignment group
+        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean().reset_index()
+    
+    return df
 
 # Streamlit display function to show courses and their grades
-def display_courses_grades_by_subaccount():
-    # Fetch the root accounts first
-    root_accounts = fetch_root_accounts()
+def display_all_courses_grades():
+    courses = fetch_all_courses()
+    st.title("Course Grades with Grades")
 
-    if not root_accounts:
-        st.error("No root accounts found.")
-        return
-    
-    # Assuming the first account is the root account
-    root_account_id = root_accounts[0]['id']
+    # Display all courses fetched
+    for course in courses:
+        course_id = course['id']
+        course_name = course['name']
+        course_code = course.get('course_code', 'N/A')  # Fetch course code
 
-    subaccounts = fetch_all_subaccounts(root_account_id)
-
-    # Ensure subaccounts are not empty
-    if not subaccounts:
-        st.error("No subaccounts found.")
-        return
-    
-    st.title("Course Grades by Subaccount")
-    
-    # Display subaccounts for selection
-    subaccount_options = {subaccount['name']: subaccount['id'] for subaccount in subaccounts}
-    
-    # Handle empty subaccount options
-    if not subaccount_options:
-        st.error("No subaccount options available.")
-        return
-
-    selected_subaccount_name = st.selectbox("Select Subaccount", list(subaccount_options.keys()))
-    
-    # Ensure the selected subaccount name is valid
-    if selected_subaccount_name not in subaccount_options:
-        st.error("Invalid subaccount selected.")
-        return
-
-    selected_subaccount_id = subaccount_options[selected_subaccount_name]
-
-    # Here you can proceed to fetch and display courses by subaccount
-    st.write(f"Selected Subaccount ID: {selected_subaccount_id}")
+        # Fetch and display the gradebook
+        df_gradebook = format_gradebook(course_id)
+        
+        # Only display courses that have grades
+        if not df_gradebook.empty:
+            st.header(f"Course: {course_name} (ID: {course_id})")
+            st.write(f"**Course Code:** {course_code}")  # Display course code
+            st.dataframe(df_gradebook)
+        else:
+            st.write(f"No grades found for {course_name}.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
-    display_courses_grades_by_subaccount()
+    display_all_courses_grades()
