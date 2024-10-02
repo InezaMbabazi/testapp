@@ -1,4 +1,4 @@
-import requests
+import requests 
 import pandas as pd
 import streamlit as st
 
@@ -64,7 +64,7 @@ def fetch_grades(course_id, assignment_id):
 
     return grades
 
-# Function to fetch student names (optimized by fetching once at the start if needed)
+# Function to fetch student names
 def fetch_student_name(student_id):
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
@@ -116,28 +116,25 @@ def format_gradebook(course_id):
     
     return df
 
-# Streamlit display function to show courses and their grades
-def display_all_courses_grades():
+# Streamlit display function to show grades for selected course
+def display_course_grades():
+    # Fetch all courses and create a dropdown for user selection
     courses = fetch_all_courses()
-    st.title("Course Grades with Grades")
+    st.title("Select a Course to View Grades")
 
-    # Display all courses fetched
-    for course in courses:
-        course_id = course['id']
-        course_name = course['name']
-        course_code = course.get('course_code', 'N/A')  # Fetch course code
+    # Display course names in a dropdown
+    course_options = {course['name']: course['id'] for course in courses}
+    selected_course_name = st.selectbox("Choose a course", list(course_options.keys()))
+    
+    # Get the selected course ID
+    selected_course_id = course_options[selected_course_name]
 
-        # Fetch and display the gradebook
-        df_gradebook = format_gradebook(course_id)
-        
-        # Only display courses that have grades
-        if not df_gradebook.empty:
-            st.header(f"Course: {course_name} (ID: {course_id})")
-            st.write(f"**Course Code:** {course_code}")  # Display course code
-            st.dataframe(df_gradebook)
-        else:
-            st.write(f"No grades found for {course_name}.")
-
-# Streamlit app starts here
-if __name__ == "__main__":
-    display_all_courses_grades()
+    # Fetch and display the gradebook for the selected course
+    df_gradebook = format_gradebook(selected_course_id)
+    
+    # Only display courses that have grades
+    if not df_gradebook.empty:
+        st.header(f"Course: {selected_course_name} (ID: {selected_course_id})")
+        st.dataframe(df_gradebook)
+    else:
+        st.write(f"No grades found for {
