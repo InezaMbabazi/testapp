@@ -1,4 +1,4 @@
-import requests
+import requests 
 import pandas as pd
 import streamlit as st
 
@@ -11,21 +11,30 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Function to fetch all enrollment terms
-def fetch_enrollment_terms():
-    url = f'{BASE_URL}/accounts/1/terms'
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        terms_data = response.json()
-        return terms_data.get('enrollment_terms', [])
-    else:
-        st.error(f"Error fetching enrollment terms: {response.status_code}")
-        return []
+# Function to fetch all subaccounts
+def fetch_all_subaccounts():
+    subaccounts = []
+    url = f'{BASE_URL}/accounts/1/subaccounts?per_page=100'
+    
+    while url:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            subaccounts_page = response.json()
+            subaccounts.extend(subaccounts_page)
+            # Handle pagination if next page exists
+            if 'next' in response.links:
+                url = response.links['next']['url']
+            else:
+                url = None
+        else:
+            st.error(f"Error fetching subaccounts: {response.status_code}")
+            break
+    return subaccounts
 
-# Function to fetch all courses in a specific term
-def fetch_courses_by_term(term_id):
+# Function to fetch courses for a specific subaccount
+def fetch_courses_by_subaccount(subaccount_id):
     courses = []
-    url = f'{BASE_URL}/accounts/1/courses?enrollment_term_id={term_id}&per_page=100'
+    url = f'{BASE_URL}/accounts/{subaccount_id}/courses?per_page=100'
     
     while url:
         response = requests.get(url, headers=headers)
@@ -128,37 +137,35 @@ def format_gradebook(course_id):
     return df
 
 # Streamlit display function to show courses and their grades
-def display_all_courses_grades():
-    # Fetch enrollment terms
-    terms = fetch_enrollment_terms()
-    if terms:
-        term_options = {term['name']: term['id'] for term in terms}
-        selected_term = st.selectbox("Select an Enrollment Term:", list(term_options.keys()))
-        term_id = term_options[selected_term]
+def display_courses_grades_by_subaccount():
+    subaccounts = fetch_all_subaccounts()
+    st.title("Course Grades by Subaccount")
+    
+    # Display subaccounts for selection
+    subaccount_options = {subaccount['name']: subaccount['id'] for subaccount in subaccounts}
+    selected_subaccount_name = st.selectbox("Select Subaccount", list(subaccount_options.keys()))
+    selected_subaccount_id = subaccount_options[selected_subaccount_name]
 
-        # Fetch courses for the selected term
-        courses = fetch_courses_by_term(term_id)
-        st.title(f"Course Grades for Term: {selected_term}")
+    # Fetch and display courses for the selected subaccount
+    courses = fetch_courses_by_subaccount(selected_subaccount_id)
+    
+    # Display all courses fetched
+    for course in courses:
+        course_id = course['id']
+        course_name = course['name']
+        course_code = course.get('course_code', 'N/A')  # Fetch course code
 
-        # Display all courses fetched
-        for course in courses:
-            course_id = course['id']
-            course_name = course['name']
-            course_code = course.get('course_code', 'N/A')  # Fetch course code
-
-            # Fetch and display the gradebook
-            df_gradebook = format_gradebook(course_id)
-            
-            # Only display courses that have grades
-            if not df_gradebook.empty:
-                st.header(f"Course: {course_name} (ID: {course_id})")
-                st.write(f"**Course Code:** {course_code}")  # Display course code
-                st.dataframe(df_gradebook)
-            else:
-                st.write(f"No grades found for {course_name}.")
-    else:
-        st.error("No enrollment terms found or access denied.")
+        # Fetch and display the gradebook
+        df_gradebook = format_gradebook(course_id)
+        
+        # Only display courses that have grades
+        if not df_gradebook.empty:
+            st.header(f"Course: {course_name} (ID: {course_id})")
+            st.write(f"**Course Code:** {course_code}")  # Display course code
+            st.dataframe(df_gradebook)
+        else:
+            st.write(f"No grades found for {course_name}.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
-    display_all_courses_grades()
+    display_courses_grades_by_subaccount()
