@@ -118,26 +118,34 @@ def format_gradebook(course_id):
 
 # Streamlit display function to show grades for selected course
 def display_course_grades():
-    # Fetch all courses and create a dropdown for user selection
+    # Fetch all courses
     courses = fetch_all_courses()
-    st.title("Select a Course to View Grades")
+    st.title("Select a Course with Grades to View")
 
-    # Display course names in a dropdown
-    course_options = {course['name']: course['id'] for course in courses}
-    selected_course_name = st.selectbox("Choose a course", list(course_options.keys()))
+    # Filter courses that have grades
+    courses_with_grades = {}
+    for course in courses:
+        course_id = course['id']
+        df_gradebook = format_gradebook(course_id)
+        
+        # Only include courses that have grades in the dropdown
+        if not df_gradebook.empty:
+            courses_with_grades[course['name']] = course_id
     
-    # Get the selected course ID
-    selected_course_id = course_options[selected_course_name]
+    if courses_with_grades:
+        # Display the filtered courses in a dropdown
+        selected_course_name = st.selectbox("Choose a course", list(courses_with_grades.keys()))
+        
+        # Get the selected course ID
+        selected_course_id = courses_with_grades[selected_course_name]
 
-    # Fetch and display the gradebook for the selected course
-    df_gradebook = format_gradebook(selected_course_id)
-    
-    # Only display courses that have grades
-    if not df_gradebook.empty:
+        # Fetch and display the gradebook for the selected course
+        df_gradebook = format_gradebook(selected_course_id)
+        
         st.header(f"Course: {selected_course_name} (ID: {selected_course_id})")
         st.dataframe(df_gradebook)
     else:
-        st.write(f"No grades found for {selected_course_name}.")
+        st.write("No courses with grades available.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
