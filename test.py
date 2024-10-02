@@ -1,8 +1,6 @@
 import requests
 import pandas as pd
 import streamlit as st
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 
 # Replace with your Canvas API token and base URL
 API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
@@ -13,19 +11,28 @@ headers = {
     'Authorization': f'Bearer {API_TOKEN}'
 }
 
-# Cache to store student names to reduce API calls
-student_name_cache = {}
+# Function to fetch all enrollment terms
+def fetch_enrollment_terms():
+    url = f'{BASE_URL}/accounts/1/terms'
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        terms_data = response.json()
+        return terms_data.get('enrollment_terms', [])
+    else:
+        st.error(f"Error fetching enrollment terms: {response.status_code}")
+        return []
 
-# Function to fetch all courses
-def fetch_all_courses():
+# Function to fetch all courses in a specific term
+def fetch_courses_by_term(term_id):
     courses = []
-    url = f'{BASE_URL}/accounts/1/courses?per_page=100'
+    url = f'{BASE_URL}/accounts/1/courses?enrollment_term_id={term_id}&per_page=100'
     
     while url:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             courses_page = response.json()
             courses.extend(courses_page)
+            # Handle pagination if next page exists
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
@@ -57,6 +64,7 @@ def fetch_grades(course_id, assignment_id):
         if response.status_code == 200:
             grades_page = response.json()
             grades.extend(grades_page)
+            # Handle pagination
             if 'next' in response.links:
                 url = response.links['next']['url']
             else:
@@ -67,20 +75,11 @@ def fetch_grades(course_id, assignment_id):
 
     return grades
 
-# Function to fetch student names (with caching)
+# Function to fetch student names
 def fetch_student_name(student_id):
-    if student_id in student_name_cache:
-        return student_name_cache[student_id]
-    
     url = f'{BASE_URL}/users/{student_id}/profile'
     response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        name = response.json().get('name', 'Unknown')
-        student_name_cache[student_id] = name
-        return name
-    else:
-        return 'Unknown'
+    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
 
 # Function to calculate percentage grades and format data
 def format_gradebook(course_id):
@@ -99,7 +98,7 @@ def format_gradebook(course_id):
             grades = fetch_grades(course_id, assignment['id'])
             for submission in grades:
                 student_id = submission['user_id']
-                student_name = fetch_student_name(student_id)  # Fetch student name with caching
+                student_name = fetch_student_name(student_id)  # Fetch student name
                 grade = submission.get('score', 0)  # Handle missing grades
 
                 # Ensure grades are numeric
@@ -128,64 +127,38 @@ def format_gradebook(course_id):
     
     return df
 
-# Function to filter courses based on the number of students
-def filter_courses_by_student_count(courses):
-    valid_courses = []
+# Streamlit display function to show courses and their grades
+def display_all_courses_grades():
+    # Fetch enrollment terms
+    terms = fetch_enrollment_terms()
+    if terms:
+        term_options = {term['name']: term['id'] for term in terms}
+        selected_term = st.selectbox("Select an Enrollment Term:", list(term_options.keys()))
+        term_id = term_options[selected_term]
 
-    # Using ThreadPoolExecutor to speed up fetching data for multiple courses
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_course = {executor.submit(format_gradebook, course['id']): course for course in courses}
+        # Fetch courses for the selected term
+        courses = fetch_courses_by_term(term_id)
+        st.title(f"Course Grades for Term: {selected_term}")
 
-        for future in future_to_course:
-            course = future_to_course[future]
+        # Display all courses fetched
+        for course in courses:
             course_id = course['id']
             course_name = course['name']
+            course_code = course.get('course_code', 'N/A')  # Fetch course code
 
-            try:
-                df_gradebook = future.result()  # Get gradebook for the course
-                if not df_gradebook.empty:
-                    # Count unique students in the gradebook
-                    student_count = df_gradebook['Student ID'].nunique()
-
-                    # Only keep courses with more than 2 students
-                    if student_count > 2:
-                        valid_courses.append(course)
-            except Exception as e:
-                st.error(f"Error processing course {course_name}: {e}")
-
-    return valid_courses
-
-# Streamlit display function to show grades for selected course
-def display_course_grades():
-    # Fetch all courses
-    courses = fetch_all_courses()
-
-    # Filter courses with more than 2 students
-    valid_courses = filter_courses_by_student_count(courses)
-
-    st.title("Select a Course to View Grades")
-
-    if not valid_courses:
-        st.write("No courses with more than 2 participants found.")
-        return
-
-    # Display course names in a dropdown
-    course_options = {course['name']: course['id'] for course in valid_courses}
-    selected_course_name = st.selectbox("Choose a course", list(course_options.keys()))
-    
-    # Get the selected course ID
-    selected_course_id = course_options[selected_course_name]
-
-    # Fetch and display the gradebook for the selected course
-    df_gradebook = format_gradebook(selected_course_id)
-    
-    # Only display courses that have grades
-    if not df_gradebook.empty:
-        st.header(f"Course: {selected_course_name} (ID: {selected_course_id})")
-        st.dataframe(df_gradebook)
+            # Fetch and display the gradebook
+            df_gradebook = format_gradebook(course_id)
+            
+            # Only display courses that have grades
+            if not df_gradebook.empty:
+                st.header(f"Course: {course_name} (ID: {course_id})")
+                st.write(f"**Course Code:** {course_code}")  # Display course code
+                st.dataframe(df_gradebook)
+            else:
+                st.write(f"No grades found for {course_name}.")
     else:
-        st.write(f"No grades found for {selected_course_name}.")
+        st.error("No enrollment terms found or access denied.")
 
 # Streamlit app starts here
 if __name__ == "__main__":
-    display_course_grades()
+    display_all_courses_grades()
