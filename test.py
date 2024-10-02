@@ -121,29 +121,34 @@ def format_gradebook(course_id):
 def display_all_courses_grades():
     courses = fetch_all_courses()
     st.title("Course Grades with Grades")
-    
-    # Define the cutoff date for filtering courses
-    cutoff_date = datetime.strptime("2024-05-01", "%Y-%m-%d")
 
-    # Filter and display courses with a start date after the cutoff date
+    # Define the date threshold
+    date_threshold = datetime.strptime("2024-05-01", "%Y-%m-%d")
+
+    # Display all courses fetched
     for course in courses:
-        course_start_date = datetime.strptime(course['start_at'], "%Y-%m-%dT%H:%M:%SZ")
-        
-        if course_start_date > cutoff_date:  # Only show courses that start after May 1, 2024
-            course_id = course['id']
-            course_name = course['name']
-            course_code = course.get('course_code', 'N/A')  # Fetch course code
+        course_id = course['id']
+        course_name = course['name']
+        course_code = course.get('course_code', 'N/A')  # Fetch course code
+        start_at = course.get('start_at')
 
-            # Fetch and display the gradebook
-            df_gradebook = format_gradebook(course_id)
-            
-            # Only display courses that have grades
-            if not df_gradebook.empty:
-                st.header(f"Course: {course_name} (ID: {course_id})")
-                st.write(f"**Course Code:** {course_code}")  # Display course code
-                st.dataframe(df_gradebook)
-            else:
-                st.write(f"No grades found for {course_name}.")
+        if start_at:
+            try:
+                course_start_date = datetime.strptime(start_at, "%Y-%m-%dT%H:%M:%SZ")
+                # Only process courses that start after the date threshold
+                if course_start_date > date_threshold:
+                    # Fetch and display the gradebook
+                    df_gradebook = format_gradebook(course_id)
+                    
+                    # Only display courses that have grades
+                    if not df_gradebook.empty:
+                        st.header(f"Course: {course_name} (ID: {course_id})")
+                        st.write(f"**Course Code:** {course_code}")  # Display course code
+                        st.dataframe(df_gradebook)
+                    else:
+                        st.write(f"No grades found for {course_name}.")
+            except ValueError:
+                st.error(f"Error parsing start date for course {course_name} (ID: {course_id}).")
 
 # Streamlit app starts here
 if __name__ == "__main__":
