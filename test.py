@@ -1,155 +1,137 @@
+import streamlit as st
+import openai
 import requests
 import pandas as pd
-import streamlit as st
-from datetime import datetime
 
-# Replace with your Canvas API token and base URL
+# Canvas API credentials
 API_TOKEN = '1941~FXJZ2tYC2DTWQr923eFTaXy473rK73A4KrYkT3uVy7WeYV9fyJQ4khH4MAGEH3Tf'
 BASE_URL = 'https://kepler.instructure.com/api/v1'
 
-# Set headers for authentication
-headers = {
-    'Authorization': f'Bearer {API_TOKEN}'
-}
+# Initialize OpenAI API with the secret key
+openai.api_key = st.secrets["openai"]["api_key"]
 
-# Function to fetch all courses
-def fetch_all_courses():
-    courses = []
-    url = f'{BASE_URL}/accounts/1/courses?per_page=100'
+# Function to get all available courses from Canvas
+def get_all_courses():
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    course_url = f"{BASE_URL}/courses"
+    response = requests.get(course_url, headers=headers)
     
-    while url:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            courses_page = response.json()
-            courses.extend(courses_page)
-            # Handle pagination if next page exists
-            if 'next' in response.links:
-                url = response.links['next']['url']
-            else:
-                url = None
-        else:
-            st.error(f"Error fetching courses: {response.status_code}")
-            break
-    return courses
+    if response.status_code == 200:
+        courses = response.json()
+        return courses
+    else:
+        st.error("Failed to fetch courses from Canvas.")
+        return []
 
-# Function to fetch assignment groups for a course
-def fetch_assignment_groups(course_id):
-    url = f'{BASE_URL}/courses/{course_id}/assignment_groups'
-    response = requests.get(url, headers=headers)
-    return response.json() if response.status_code == 200 else []
-
-# Function to fetch assignments in each group
-def fetch_assignments(course_id, group_id):
-    url = f'{BASE_URL}/courses/{course_id}/assignment_groups/{group_id}/assignments'
-    response = requests.get(url, headers=headers)
-    return response.json() if response.status_code == 200 else []
-
-# Function to fetch student submissions for an assignment
-def fetch_grades(course_id, assignment_id):
-    grades = []
-    url = f'{BASE_URL}/courses/{course_id}/assignments/{assignment_id}/submissions?per_page=100'
-
-    while url:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            grades_page = response.json()
-            grades.extend(grades_page)
-            # Handle pagination
-            if 'next' in response.links:
-                url = response.links['next']['url']
-            else:
-                url = None
-        else:
-            st.error(f"Error fetching grades: {response.status_code}")
-            break
-
-    return grades
-
-# Function to fetch student names
-def fetch_student_name(student_id):
-    url = f'{BASE_URL}/users/{student_id}/profile'
-    response = requests.get(url, headers=headers)
-    return response.json().get('name', 'Unknown') if response.status_code == 200 else 'Unknown'
-
-# Function to calculate percentage grades and format data
-def format_gradebook(course_id):
-    gradebook = []
-    assignment_groups = fetch_assignment_groups(course_id)
+# Function to get course by code and its assignments
+def get_course_by_code(course_code):
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
     
-    for group in assignment_groups:
-        group_name = group['name']
-        group_weight = group.get('group_weight', 0)  # Handle missing group weight
-
-        assignments = fetch_assignments(course_id, group['id'])
-        for assignment in assignments:
-            assignment_name = assignment['name']
-            assignment_max_score = assignment.get('points_possible', 0)  # Default to 0 if not present
-
-            grades = fetch_grades(course_id, assignment['id'])
-            for submission in grades:
-                student_id = submission['user_id']
-                student_name = fetch_student_name(student_id)  # Fetch student name
-                grade = submission.get('score', 0)  # Handle missing grades
-
-                # Ensure grades are numeric
-                grade = float(grade) if grade is not None else 0
-                assignment_max_score = float(assignment_max_score) if assignment_max_score is not None else 0
-
-                # Calculate percentage
-                percentage = (grade / assignment_max_score) * 100 if assignment_max_score > 0 else 0
-
-                gradebook.append({
-                    'Student ID': student_id,
-                    'Student Name': student_name,
-                    'Assignment Group': group_name,
-                    'Group Weight': group_weight,
-                    'Assignment Name': assignment_name,
-                    'Grade': grade,
-                    'Max Score': assignment_max_score,
-                    'Percentage': round(percentage, 2)
-                })
+    # Get all courses
+    courses = get_all_courses()
+    course = next((c for c in courses if str(course_code) in c['course_code']), None)
     
-    df = pd.DataFrame(gradebook)
-
-    if not df.empty:
-        # Group by student and assignment group
-        df = df.groupby(['Student ID', 'Student Name', 'Assignment Group', 'Assignment Name', 'Group Weight']).mean().reset_index()
-    
-    return df
-
-# Streamlit display function to show courses and their grades
-def display_all_courses_grades():
-    courses = fetch_all_courses()
-    st.title("Course Grades with Grades")
-
-    # Define the date threshold
-    date_threshold = datetime.strptime("2024-05-01", "%Y-%m-%d")
-
-    # Display all courses fetched
-    for course in courses:
+    if course:
         course_id = course['id']
         course_name = course['name']
-        course_code = course.get('course_code', 'N/A')  # Fetch course code
-        start_at = course.get('start_at')
+        
+        # Fetch assignments for this course
+        assignments_url = f"{BASE_URL}/courses/{course_id}/assignments"
+        assignments_response = requests.get(assignments_url, headers=headers)
+        
+        if assignments_response.status_code == 200:
+            assignments = assignments_response.json()
+            return course_name, assignments
+        else:
+            st.error("Failed to retrieve assignments.")
+            return None, []
+    else:
+        st.error("Course code not found.")
+        return None, []
 
-        if start_at:
-            try:
-                course_start_date = datetime.strptime(start_at, "%Y-%m-%dT%H:%M:%SZ")
-                # Only process courses that start after the date threshold
-                if course_start_date > date_threshold:
-                    # Fetch and display the gradebook
-                    df_gradebook = format_gradebook(course_id)
-                    
-                    # Only display courses that have grades
-                    if not df_gradebook.empty:
-                        st.header(f"Course: {course_name} (ID: {course_id})")
-                        st.write(f"**Course Code:** {course_code}")  # Display course code
-                        st.dataframe(df_gradebook)
-                    else:
-                        st.write(f"No grades found for {course_name}.")
-            except ValueError:
-                st.error(f"Error parsing start date for course {course_name} (ID: {course_id}).")
+# Function to get grading from OpenAI based on student submissions and proposed answers
+def get_grading(student_submission, proposed_answer, content_type):
+    grading_prompt = f"Evaluate the student's submission based on the proposed answer:\n\n"
+    if content_type == "Math (LaTeX)":
+        grading_prompt += f"**Proposed Answer (LaTeX)**: {proposed_answer}\n\n"
+        grading_prompt += f"**Student Submission (LaTeX)**: {student_submission}\n\n"
+        grading_prompt += "Provide feedback on correctness, grade out of 10, and suggest improvements."
+    elif content_type == "Programming (Code)":
+        grading_prompt += f"**Proposed Code**: {proposed_answer}\n\n"
+        grading_prompt += f"**Student Code Submission**: {student_submission}\n\n"
+        grading_prompt += "Check logic, efficiency, correctness, and grade out of 10."
+    else:
+        grading_prompt += f"**Proposed Answer**: {proposed_answer}\n\n"
+        grading_prompt += f"**Student Submission**: {student_submission}\n\n"
+        grading_prompt += "Provide detailed feedback and grade out of 10. Suggest improvements."
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": grading_prompt}]
+    )
+    
+    feedback = response['choices'][0]['message']['content']
+    return feedback
 
-# Streamlit app starts here
-if __name__ == "__main__":
-    display_all_courses_grades()
+# Streamlit UI
+st.image("header.png", use_column_width=True)
+st.title("Kepler College AI-Powered Grading Assistant")
+
+# Fixed course code
+course_code = '2850'
+
+# Fetch course details
+course_name, assignments = get_course_by_code(course_code)
+
+if course_name and assignments:
+    st.subheader(f"Course: {course_name}")
+    
+    # Display assignments for selection
+    assignment_names = [assignment['name'] for assignment in assignments]
+    selected_assignment = st.selectbox("Select Assignment to Grade:", assignment_names)
+    
+    # Input for the proposed answer
+    proposed_answer = st.text_area("Proposed Answer:", placeholder="Type the answer you expect from the student here...")
+
+    # Dropdown for selecting content type
+    content_type = st.selectbox("Select Content Type", options=["Text", "Math (LaTeX)", "Programming (Code)"])
+    
+    # Submit to grade selected assignment
+    if selected_assignment and proposed_answer:
+        # Mock student submissions (replace with actual data retrieval logic from Canvas or a database)
+        student_submissions = [
+            {"name": "Student A", "submission": "Sample submission A", "turnitin": 12},
+            {"name": "Student B", "submission": "Sample submission B", "turnitin": 28},
+            {"name": "Student C", "submission": "Sample submission C", "turnitin": 5},
+        ]
+        
+        # Create a DataFrame to capture results
+        results = []
+
+        for student in student_submissions:
+            student_submission = student['submission']
+            turnitin_score = student['turnitin']
+            
+            # Get grading feedback
+            feedback = get_grading(student_submission.strip(), proposed_answer, content_type)
+
+            # Extract grade (you can add logic here to extract it automatically from feedback)
+            grade = "8/10"  # Replace with actual extraction logic if needed
+            
+            # Clean feedback to remove grades (if necessary)
+            feedback_cleaned = feedback.replace(grade, "").strip()
+
+            # Append to results
+            results.append({
+                "Student Name": student['name'],
+                "Submission": student_submission,
+                "Grade": grade,
+                "Feedback": feedback_cleaned,
+                "Turnitin Score (%)": turnitin_score
+            })
+        
+        # Convert results to a DataFrame for display
+        df_results = pd.DataFrame(results)
+        st.dataframe(df_results)
+else:
+    st.write("Course code 2850 not found.")
